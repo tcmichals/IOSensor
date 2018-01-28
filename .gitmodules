@@ -1,3 +1,6 @@
 [submodule "depend/jerryscript"]
 	path = depend/jerryscript
 	url = https://github.com/jerryscript-project/jerryscript.git
+[submodule "depend/lwip"]
+	path = depend/lwip
+	url = https://git.savannah.gnu.org/git/lwip.git
