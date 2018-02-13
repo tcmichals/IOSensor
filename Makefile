@@ -243,6 +243,7 @@ debug:
 clean:
 	rm -f $(TARGET).elf $(TARGET).map 
 	rm -rf obj
+	rm -f *.hex *.map *.elf *.bin
 
 
 
