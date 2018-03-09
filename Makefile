@@ -5,12 +5,17 @@ TARGET ?= SPRACINGF4EVO
 # SPRACINGF4EVO
 # STM32F407VET6_BLUE_BOARD
 
+DIR := ${CURDIR}
 
 DEBUG ?= GDB
 TARGET_FLAGS= -DSTM32F407xx
 OBJECT_DIR = obj
 V ?=1
 
+#need protoc file
+REQUIRED_BINS := protoc python3
+$(foreach bin,$(REQUIRED_BINS),\
+    $(if $(shell command -v $(bin) 2> /dev/null),$(info Found `$(bin)`),$(error Please install `$(bin)`)))
 
 #compiler
 CC := $(CCACHE) arm-none-eabi-gcc
@@ -112,6 +117,19 @@ APP_INCLUDE:= Inc
 
 
 
+PROTOC_FILES:= $(wildcard protofiles/*.proto) 
+GEN_NANOPB_C_FILES:= protofiles/generated/timestamp.pb.c protofiles/generated/messages.pb.c 
+GEN_NANOPB_INC:= depend/nanopb
+
+
+
+#protofiles/generated/messages.pb.c: protofiles/messages.proto
+#	protoc -I=protofiles -oprotofiles/generated/messages.pb  protofiles/messages.proto
+#	python3 depend/nanopb/generator/nanopb_generator.py protofiles/generated/messages.pb
+
+NANOPB_SRC:=$(wildcard depend/nanopb/*.c)
+
+	
 
 # ***************** SRC ******************************************
 
@@ -123,7 +141,9 @@ SRC = 	$(STM32Cube_F4_DRIVER_SRC) \
 	$(USB_SRC) \
 	$(BOARD_SRC) \
 	$(APP_SRC) \
-	$(BOARD_STARTUP)
+	$(BOARD_STARTUP) \
+	$(GEN_NANOPB_C_FILES) \
+	$(NANOPB_SRC)
 	
 	
 	
@@ -138,9 +158,9 @@ INCLUDE_DIRS = 	$(APP_INCLUDE)/msgProtocol \
 		$(CMSIS_FREERTOS_INC) \
 		$(LWIP_INC) \
 		$(USB_INC) \
-		$(PROTOTHREADS_INC)
+		$(PROTOTHREADS_INC) \
+		$(GEN_NANOPB_INC)
 		
-
 
 TARGET_OBJS	 = $(addsuffix .o,$(addprefix ./$(OBJECT_DIR)/$(TARGET)/,$(basename $(SRC))))
 TARGET_DEPS	 = $(addsuffix .d,$(addprefix ./$(OBJECT_DIR)/$(TARGET)/,$(basename $(SRC))))	
@@ -208,7 +228,7 @@ LDFLAGS		 = -lm \
 	   
 all: $(TARGET).elf 
 	
-$(TARGET).elf:  $(TARGET_OBJS)
+$(TARGET).elf: $(TARGET_OBJS)
 	$(CXX) -o $@ $^ $(LDFLAGS)
 	$(SIZE) $(TARGET).elf
 	$(OBJCOPY) -O ihex --set-start 0x8000000 $(TARGET).elf $(TARGET).hex
@@ -235,6 +255,15 @@ $(OBJECT_DIR)/$(TARGET)/%.o: %.cpp
 	@echo %% $(notdir $<)
 	$(CXX) -c -o $@ $(CXXFLAGS) $<
 
+# create files
+protofiles/generated/timestamp.pb.c: protofiles/timestamp.proto
+	protoc -oprotofiles/generated/timestamp.pb  protofiles/timestamp.proto
+	python3 depend/nanopb/generator/nanopb_generator.py protofiles/generated/timestamp.pb
+
+protofiles/generated/messages.pb.c: protofiles/messages.proto
+	protoc -I=protofiles -oprotofiles/generated/messages.pb  protofiles/messages.proto
+	python3 depend/nanopb/generator/nanopb_generator.py protofiles/generated/messages.pb
+
 debug:
 
 	@echo $(STM32Cube_F4_DRIVER_SRC)
@@ -244,8 +273,11 @@ clean:
 	rm -f $(TARGET).elf $(TARGET).map 
 	rm -rf obj
 	rm -f *.hex *.map *.elf *.bin
+	rm -f protofiles/generated/*
 
-
+debugtim:
+	echo $(PROTOC_FILES)
+	echo $(GEN_NANOPB_C_FILES)
 
 
 -include $(TARGET_OBJS:%.o=%.d)	
