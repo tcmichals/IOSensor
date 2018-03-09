@@ -7,3 +7,6 @@
 [submodule "depend/lwip-contrib"]
 	path = depend/lwip-contrib
 	url = https://git.savannah.nongnu.org/git/lwip/lwip-contrib.git
+[submodule "depend/nanopb"]
+	path = depend/nanopb
+	url = https://github.com/nanopb/nanopb.git

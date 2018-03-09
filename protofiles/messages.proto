@@ -1,0 +1,72 @@
+syntax = "proto3";
+
+/*import "google/protobuf/timestamp.proto"; */
+import "timestamp.proto"; 
+
+option java_package = "com.appliedvillainy.io.stm32.protobuffer.sensor";
+
+
+enum MessageType {
+    Request = 0;
+    Response = 1;
+    Event = 2;
+}
+
+enum PayloadType {
+    Ping = 0;
+    GPS = 1;
+    IMU = 2;
+  }
+
+
+message UdpMessage
+{
+    uint32 id = 1;
+    MessageType type = 2;
+    oneof message {
+    		MessageHeader header = 3;
+    		PingRequest pingReq =4;
+    		PingResponse pingResp =5;
+    		RawGpsSensorRequest gpsReq=6;
+    		RawGpsSensorEvent gpsResp=7;
+    		RawImuSensorRequest imuReq=8;
+    		RawImuSensorEvent imuResp=9;
+    		
+    }
+}
+
+
+message MessageHeader {
+	 MessageType messageType=1;
+	 PayloadType payloadType=2;
+	 uint32 id=3;
+}
+
+
+message RawGpsSensorEvent {
+    double latitude = 1;
+    double longitude = 2;
+    float altitude = 3;
+}
+
+message RawGpsSensorRequest {
+    uint32 rateInMs =1;
+}
+
+message RawImuSensorEvent {
+    float rollRate = 1;
+    float yawRate = 2;
+    float pitchRate = 3;
+}
+
+message RawImuSensorRequest {
+   uint32 rateInMs =1;
+}
+
+message PingRequest {
+	 uint32 foo = 1;
+}
+
+message PingResponse {
+	 uint32 foo = 1;
+}
