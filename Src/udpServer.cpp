@@ -10,10 +10,12 @@
 #include "semphr.h"
 #include "task.h"
 
-#include "msgLogger.h"
+#include "timestamp.pb.h"
+#include "messages.pb.h"
 #include "ringBuffer.h"
 #include "startUp.h"
 #include "udpServer.h"
+#include "msgLogger.h"
 
 #include "string.h"
 #include <stdarg.h>
@@ -24,20 +26,21 @@
 #include "lwip/stats.h"
 #include "lwip/tcpip.h"
 #include "lwip/udp.h"
+//nano pb..
+#include <pb_encode.h>
+#include <pb_decode.h>
 
 #define LC_INCLUDE "lc-addrlabels.h"
 #include "pt.h"
 
 #define NUM_MSGS 10
-#define STACK_SIZE_PHANDLER 512
+#define STACK_SIZE_PHANDLER ((sizeof(UdpMessage) * 4) + 512)
 #define PRIORITY_PHANDLER (tskIDLE_PRIORITY + 2)
 
 static StaticTask_t gUDPServicesTskHandleStatic;
 static TaskHandle_t gUDPServicesTskHandle;
 static std::array<StackType_t, STACK_SIZE_PHANDLER> stackPHandlerUDPServer;
 
-#define MAX_MSG_SIZE 512
-#define MAX_MSG_QUEUE 5
 #define UDP_PORT_IO 56000
 
 class udpServer
@@ -63,10 +66,9 @@ class udpServer
 
     typedef struct
     {
-        event_t m_event;
-        struct pbuf* m_pbufMsg; // lwipBuffer
-        uint32_t m_lenOfMsgToSend;
-        udpServer* m_this;
+        event_t     m_event;
+        udpServer*  m_this;
+        UdpMessage  m_msg;
     } lwipArgs_t;
 
   protected:
@@ -74,35 +76,33 @@ class udpServer
     struct udp_pcb*     udpServer_pcb;
     struct pt           m_cmdThread;
     struct pt           m_udpSocketThread;
+    
     SemaphoreHandle_t   m_mutex;
     StaticSemaphore_t   xMutexBuffer;
+    
+    QueueHandle_t       m_msgQueueHandle;
+    StaticQueue_t       m_msgStaticQueue;
+    
+    
     ip_addr_t           m_ipLastAddr;
     u16_t               m_pastPort;
     
-    std::array<lwipArgs_t, NUM_MSGS> m_argsArray;
-    ringBuffer<lwipArgs_t*, NUM_MSGS> m_argsRingBuffer;
-    std::array<uint8_t, MAX_MSG_SIZE> m_msgToRoute;
-
+    std::array<lwipArgs_t, NUM_MSGS>    m_msgArray;
+    ringBuffer<lwipArgs_t*, NUM_MSGS>   m_msgRingBuffer;
+    
+    // MAX SIZE OF UDP PACKET.. 
+    std::array<uint8_t, 1500> m_inputBuffer;
+    std::array<uint8_t, sizeof(UdpMessage) *2> m_outputBuffer;
+    std::array<uint8_t, sizeof(UdpMessage) *5> m_msgQueueStorage;
+    
     bool m_transportActive;
 
   protected:
     lwipArgs_t* allocArgs();
-    
     void freeArgs(lwipArgs_t* arg);
-    
     int cmdThread(struct pt*, lwipArgs_t* args);
-    
     int socketThread(struct pt*, struct pbuf* pBuf);
-    
-    msgProtocol::postMsgPort_Rt_t routeMsgs(msgProtocol::msgPorts toPort, 
-                                            msgProtocol::msgPorts fromPort, 
-                                            void* pMsg, 
-                                            uint16_t lenOfMsg);
-    msgProtocol::postMsgPort_Rt_t pingMsg(msgProtocol::msgPorts toPort, 
-                                            msgProtocol::msgPorts fromPort, 
-                                            void* pMsg, 
-                                            uint16_t lenOfMsg);
-        
+    bool routeMsg(const UdpMessage &msg );
     void createSocket();
 
     const char* decodeEvt(event_t evt)
@@ -141,16 +141,10 @@ class udpServer
     virtual ~udpServer();
 
     void freeRTOSThread(void* arg);
-    bool sendCmdTolwIP(msgProtocol::msgPorts toPort,
-                       msgProtocol::msgPorts fromPort,
-                       void* pMsg,
-                       uint16_t lenOfMsg,
-                       event_t evt);
+    bool sendCmdTolwIP(const lwipArgs_t &msg );
 };
 
-inline udpServer::udpServer()
-    : udpServer_pcb(nullptr)
-
+inline udpServer::udpServer(): udpServer_pcb(nullptr)
 {
     memset(&m_ipLastAddr, 0, sizeof(m_ipLastAddr));
 }
@@ -217,11 +211,27 @@ inline int udpServer::cmdThread(struct pt* pt, lwipArgs_t* args)
 
         case event_t::sendUDPPkt_Cmd:
         {
-            if(m_ipLastAddr.addr && args->m_pbufMsg && udpServer_pcb)
+            if(m_ipLastAddr.addr && udpServer_pcb)
             {
+                //OK need to serialize message .. 
                 // SYSLOGMSG(LogMsg_Debug, "%s:%d: UDP sending pkt", __PRETTY_FUNCTION__, __LINE__);
-                if(ERR_OK == udp_sendto(udpServer_pcb, args->m_pbufMsg, &m_ipLastAddr, UDP_PORT_IO))
-                    m_transportActive = true;
+                
+                //encode message
+                pb_ostream_t stream = pb_ostream_from_buffer(m_outputBuffer.data(), m_outputBuffer.size());
+                if (pb_encode_delimited(&stream, UdpMessage_fields, &args->m_msg))
+                {
+                    //create a pbuff to send via UDP
+                    struct pbuf* pbufMsg = pbuf_alloc(PBUF_TRANSPORT, stream.bytes_written, PBUF_RAM);
+                    
+                    //copy user buffer into UDP
+                    if (!pbufMsg || (ERR_OK != pbuf_take(pbufMsg, m_outputBuffer.data(), stream.bytes_written)))
+                    {
+                        if(ERR_OK == udp_sendto(udpServer_pcb, pbufMsg, &m_ipLastAddr, UDP_PORT_IO))
+                            m_transportActive = true;
+                        
+                        pbuf_free(pbufMsg);  //free pbuff
+                    }
+                }
             }
             else
             {
@@ -248,30 +258,31 @@ inline int udpServer::socketThread(struct pt* pt, struct pbuf* pBuf)
         SYSLOGMSG(LogMsg_Debug, "%s:%d: msg size:pBuf->tot_len=%d", __PRETTY_FUNCTION__, __LINE__, pBuf->tot_len);
         if(pBuf)
         {
-            // need a packet reassembly UDP can fragment the packet also..
-            if(pBuf->tot_len >= sizeof(msgProtocol::msgHdr_t))
-            {
-                u16_t lenCopied = pbuf_copy_partial(pBuf, m_msgToRoute.data(),
-                                                    std::min(m_msgToRoute.size(), (size_t)pBuf->tot_len), 0);
-                msgProtocol::msgHdr_t* pHdr = reinterpret_cast<msgProtocol::msgHdr_t*>(m_msgToRoute.data());
 
-                if((lenCopied < m_msgToRoute.size()) &&
-                   (pHdr->m_len >= (pBuf->tot_len - sizeof(msgProtocol::msgHdr_t))))
-                {
-                    // OK have a valid message route message..
-                    msgProtocol::postMsg(static_cast<msgProtocol::msgPorts>(pHdr->m_toPort),
-                                         static_cast<msgProtocol::msgPorts>(pHdr->m_fromPort),
-                                         static_cast<void*>(pHdr + 1), pHdr->m_len);
-                }
+            u16_t lenCopied = pbuf_copy_partial(pBuf, m_inputBuffer.data(),
+                                                std::min(m_inputBuffer.size(), (size_t)pBuf->tot_len), 0);
+                
+            pb_istream_t input = pb_istream_from_buffer(m_inputBuffer.data(), lenCopied);
+                
+            UdpMessage request= {};
+            if (false == pb_decode_delimited(&input, UdpMessage_fields, &request))
+            {
+                SYSLOGMSG(LogMsg_Debug, "%s:%d: DECODE FAILED", __PRETTY_FUNCTION__, __LINE__);
+                //free packet
+                pbuf_free(pBuf);
+                break;
             }
-            // p->tot_len
-            // OK need to figure out
+            
+            if ( xQueueSend(m_msgQueueHandle , &request, 0))
+            {
+                SYSLOGMSG(LogMsg_Debug, "%s:%d: POST FAILED", __PRETTY_FUNCTION__, __LINE__);
+            }
+            //free packet.. 
             pbuf_free(pBuf);
-            // OK got a packet
+
         }
 
         PT_YIELD(pt);
-
         // OK it is an UDP event
     }
 
@@ -284,7 +295,7 @@ inline udpServer::lwipArgs_t* udpServer::allocArgs()
 
     if(xSemaphoreTake(m_mutex, portMAX_DELAY))
     {
-        m_argsRingBuffer.pop(rc);
+        m_msgRingBuffer.pop(rc);
     }
 
     xSemaphoreGive(m_mutex);
@@ -296,77 +307,39 @@ inline void udpServer::freeArgs(lwipArgs_t* arg)
 {
     if(arg && xSemaphoreTake(m_mutex, portMAX_DELAY))
     {
-        m_argsRingBuffer.push(arg);
+        m_msgRingBuffer.push(arg);
         xSemaphoreGive(m_mutex);
     }
 }
 
-inline bool udpServer::sendCmdTolwIP(msgProtocol::msgPorts toPort,
-                                     msgProtocol::msgPorts fromPort,
-                                     void* pMsg,
-                                     uint16_t lenOfMsg,
-                                     event_t evt)
+inline 
+bool udpServer::sendCmdTolwIP(const lwipArgs_t &msg)
 {
     //  SYSLOGMSG(LogMsg_Debug, "%s:%d:+", __PRETTY_FUNCTION__, __LINE__);
     // Going to post a message to udpServer thread in lwIP
-    lwipArgs_t* args = allocArgs();
-    if(!args || ((lenOfMsg + sizeof(msgProtocol::msgHdr_t)) > MAX_MSG_SIZE))
+    lwipArgs_t* pMsg = allocArgs();
+    if( !pMsg )
     {
         SYSLOGMSG(LogMsg_Debug, "%s:%d:+", __PRETTY_FUNCTION__, __LINE__);
         return false;
     }
+    // copy message
+    *pMsg = msg;
 
-    struct pbuf* pbufMsg = nullptr;
-    // setup hdr..
-    msgProtocol::msgHdr_t msgHdr;
-    memset(&msgHdr, 0, sizeof(msgHdr));
-    msgHdr.m_toPort = static_cast<uint16_t>(toPort);
-    msgHdr.m_fromPort = static_cast<uint16_t>(fromPort);
-    msgHdr.m_len = lenOfMsg;
-
-    memset(args, 0, sizeof(*args));
-
-    if(lenOfMsg)
-    {
-        pbufMsg = pbuf_alloc(PBUF_TRANSPORT, lenOfMsg + sizeof(msgProtocol::msgHdr_t), PBUF_RAM);
-        if(!pbufMsg || (ERR_OK != pbuf_take_at(pbufMsg, pMsg, lenOfMsg, sizeof(msgProtocol::msgHdr_t))) ||
-           (ERR_OK != pbuf_take(pbufMsg, &msgHdr, sizeof(msgHdr))))
-        {
-            SYSLOGMSG(LogMsg_Debug, "%s:%d:ERROR-", __PRETTY_FUNCTION__, __LINE__);
-            freeArgs(args);
-            return false;
-        }
-        args->m_lenOfMsgToSend = lenOfMsg + sizeof(msgProtocol::msgHdr_t);
-    }
-
-    // need to post to lwIP thread..
-    args->m_this = this;
-    args->m_event = evt;
-    args->m_pbufMsg = pbufMsg;
-
-    if(ERR_OK != tcpip_callback_with_block(
-                     [](void* ctx) -> void {
-                         udpServer::lwipArgs_t* args = reinterpret_cast<udpServer::lwipArgs_t*>(ctx);
-                         if(args && args->m_this)
+    if(ERR_OK != tcpip_callback_with_block([](void* ctx) -> void 
+                     {
+                         lwipArgs_t* pMsg = reinterpret_cast<lwipArgs_t *>(ctx);
+                         if( pMsg )
                          {
-                             args->m_this->cmdThread(&args->m_this->m_cmdThread, args);
-                             if(args)
-                             {
-                                 pbuf_free(args->m_pbufMsg);
-                                 args->m_this->freeArgs(args);
-                             }
+                             pMsg->m_this->cmdThread(&pMsg->m_this->m_cmdThread, pMsg);
+                             pMsg->m_this->freeArgs(pMsg);
                          }
                      },
-                     reinterpret_cast<void*>(args), 0))
+                     reinterpret_cast<void*>(pMsg), 0))
     {
-        if(args->m_pbufMsg)
+        if(pMsg)
         {
-            pbuf_free(args->m_pbufMsg);
-        }
-
-        if(args)
-        {
-            freeArgs(args);
+            freeArgs(pMsg);
         }
         return false;
     }
@@ -375,31 +348,22 @@ inline bool udpServer::sendCmdTolwIP(msgProtocol::msgPorts toPort,
     return true;
 }
 
-msgProtocol::postMsgPort_Rt_t
-udpServer::routeMsgs(msgProtocol::msgPorts toPort, 
-                     msgProtocol::msgPorts fromPort, 
-                     void* pMsg, 
-                     uint16_t lenOfMsg)
+
+bool udpServer::routeMsg(const  UdpMessage &msg ) 
 {
-    // OK need to route a msg out to UDP...
-
-    sendCmdTolwIP(toPort, fromPort, pMsg, lenOfMsg, event_t::sendUDPPkt_Cmd);
-
-    return msgProtocol::postMsgPort_Rt_t::OK;
-}
-
-
-msgProtocol::postMsgPort_Rt_t udpServer::pingMsg(msgProtocol::msgPorts toPort, 
-                                                 msgProtocol::msgPorts fromPort, 
-                                                void* pMsg, 
-                                                uint16_t lenOfMsg)
-{
-    sendCmdTolwIP(toPort, fromPort, pMsg, lenOfMsg, event_t::sendUDPPkt_Cmd);
-
-    return msgProtocol::postMsgPort_Rt_t::OK;
+    lwipArgs_t args;
     
+    memset(&args, 0, sizeof(args));
+    
+    args.m_event = event_t::sendUDPPkt_Cmd;
+    args.m_this = this;
+    args.m_msg = msg;
+    
+    // OK need to route a msg out to UDP...
+    return sendCmdTolwIP(args);
 }
-        
+
+     
 
 
 void udpServer::freeRTOSThread(void* arg)
@@ -410,48 +374,54 @@ void udpServer::freeRTOSThread(void* arg)
     PT_INIT(&m_udpSocketThread);
 
     m_mutex = xSemaphoreCreateMutexStatic(&xMutexBuffer);
+    m_msgQueueHandle = xQueueCreateStatic(NUM_MSGS, 
+                                          sizeof(UdpMessage),
+                                          m_msgQueueStorage.data(),
+                                          &m_msgStaticQueue);
+                                          
+                                          
 
-    for(size_t _index = 0; _index < m_argsArray.size(); _index++)
+    for(size_t _index = 0; _index < m_msgArray.size(); _index++)
     {
-        m_argsRingBuffer.push(&m_argsArray[_index]);
+        m_msgRingBuffer.push(&m_msgArray[_index]);
     }
 
-    {
-        auto _callback = std::bind(&udpServer::routeMsgs, 
-                                    this, 
-                                    std::placeholders::_1, 
-                                    std::placeholders::_2,
-                                    std::placeholders::_3, 
-                                    std::placeholders::_4);
-
-        msgProtocol::registerMsgPort(msgProtocol::msgPorts::pwmInClient, _callback);
-    }
-    
-    {
-    
-        auto _callback = std::bind(&udpServer::pingMsg, 
-                                    this, 
-                                    std::placeholders::_1, 
-                                    std::placeholders::_2,
-                                    std::placeholders::_3, 
-                                    std::placeholders::_4);
-    
-
-        msgProtocol::registerMsgPort(msgProtocol::msgPorts::pingTransport, _callback);
-    }
-
-    sendCmdTolwIP(msgProtocol::msgPorts::dynamicPort, 
-                  msgProtocol::msgPorts::dynamicPort, 
-                  nullptr, 
-                  0,
-                  event_t::startUDPSocket_Cmd);
-
-
+    lwipArgs_t msg;
+    memset(&msg, 0, sizeof(msg));
+    msg.m_event = event_t::startUDPSocket_Cmd;
+    sendCmdTolwIP(msg);
 
     while(1)
     {
         TickType_t ticks = 500 / portTICK_PERIOD_MS;
-        vTaskDelay(ticks);
+        UdpMessage msg;
+        BaseType_t  rc = xQueueReceive(m_msgQueueHandle,
+                                        &msg,
+                                        ticks);
+         if (pdTRUE == rc)
+         {
+             //Received a message over UDP.. route.. or send
+             switch ( msg.which_message)
+             {
+                 case UdpMessage_pingReq_tag:
+                 {
+                     //turn around the message .. 
+                     UdpMessage pingMsg;
+                     
+                     memset(&pingMsg, 0, sizeof(pingMsg));
+                     pingMsg.id = msg.id;
+                     pingMsg.type = MessageType_Response;
+                     pingMsg.message.pingReq.foo = msg.message.pingReq.foo;
+                     pingMsg.which_message = UdpMessage_pingResp_tag;
+                     //send .. 
+                     routeMsg(pingMsg);
+                 }
+                 break;
+              
+             }
+         }
+                                        
+        
 
         m_transportActive = false;
     }

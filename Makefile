@@ -119,8 +119,7 @@ APP_INCLUDE:= Inc
 
 PROTOC_FILES:= $(wildcard protofiles/*.proto) 
 GEN_NANOPB_C_FILES:= protofiles/generated/timestamp.pb.c protofiles/generated/messages.pb.c 
-GEN_NANOPB_INC:= depend/nanopb
-
+GEN_NANOPB_C_INCLUDE=protofiles/generated
 
 
 #protofiles/generated/messages.pb.c: protofiles/messages.proto
@@ -128,6 +127,7 @@ GEN_NANOPB_INC:= depend/nanopb
 #	python3 depend/nanopb/generator/nanopb_generator.py protofiles/generated/messages.pb
 
 NANOPB_SRC:=$(wildcard depend/nanopb/*.c)
+NANOPB_INC:= depend/nanopb
 
 	
 
@@ -159,7 +159,7 @@ INCLUDE_DIRS = 	$(APP_INCLUDE)/msgProtocol \
 		$(LWIP_INC) \
 		$(USB_INC) \
 		$(PROTOTHREADS_INC) \
-		$(GEN_NANOPB_INC)
+		$(GEN_NANOPB_C_INCLUDE) $(NANOPB_INC)
 		
 
 TARGET_OBJS	 = $(addsuffix .o,$(addprefix ./$(OBJECT_DIR)/$(TARGET)/,$(basename $(SRC))))
