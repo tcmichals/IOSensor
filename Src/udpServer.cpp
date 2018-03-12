@@ -10,7 +10,7 @@
 #include "semphr.h"
 #include "task.h"
 
-//#include "timestamp.pb.h"
+#include "timestamp.pb.h"
 #include "messages.pb.h"
 #include "ringBuffer.h"
 #include "startUp.h"
@@ -388,6 +388,7 @@ void udpServer::freeRTOSThread(void* arg)
 
     lwipArgs_t msg;
     memset(&msg, 0, sizeof(msg));
+    msg.m_this = this;
     msg.m_event = event_t::startUDPSocket_Cmd;
     sendCmdTolwIP(msg);
 
