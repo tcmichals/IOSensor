@@ -224,10 +224,13 @@ inline int udpServer::cmdThread(struct pt* pt, lwipArgs_t* args)
                     struct pbuf* pbufMsg = pbuf_alloc(PBUF_TRANSPORT, stream.bytes_written, PBUF_RAM);
                     
                     //copy user buffer into UDP
-                    if (!pbufMsg || (ERR_OK != pbuf_take(pbufMsg, m_outputBuffer.data(), stream.bytes_written)))
+                    if (pbufMsg)
                     {
-                        if(ERR_OK == udp_sendto(udpServer_pcb, pbufMsg, &m_ipLastAddr, UDP_PORT_IO))
-                            m_transportActive = true;
+                        if (ERR_OK == pbuf_take(pbufMsg, m_outputBuffer.data(), stream.bytes_written))
+                        {
+                            if(ERR_OK == udp_sendto(udpServer_pcb, pbufMsg, &m_ipLastAddr,  m_pastPort))
+                                m_transportActive = true;
+                        }
                         
                         pbuf_free(pbufMsg);  //free pbuff
                     }
