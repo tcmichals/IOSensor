@@ -134,7 +134,8 @@ NANOPB_INC:= depend/nanopb
 # ***************** SRC ******************************************
 
 
-SRC = 	$(STM32Cube_F4_DRIVER_SRC) \
+SRC = 	$(GEN_NANOPB_C_FILES) \
+	$(STM32Cube_F4_DRIVER_SRC) \
 	$(FREERTOS_RTOS_SRC) $(CMSIS_FREERTOS_SRC)\
 	$(FREERTOS_PORTABLE_SRC) \
 	$(LWIP_SRC) \
@@ -142,7 +143,6 @@ SRC = 	$(STM32Cube_F4_DRIVER_SRC) \
 	$(BOARD_SRC) \
 	$(APP_SRC) \
 	$(BOARD_STARTUP) \
-	$(GEN_NANOPB_C_FILES) \
 	$(NANOPB_SRC)
 	
 	
@@ -260,6 +260,7 @@ protofiles/generated/timestamp.pb.c: protofiles/timestamp.proto
 	protoc -oprotofiles/generated/timestamp.pb  protofiles/timestamp.proto
 	python3 depend/nanopb/generator/nanopb_generator.py protofiles/generated/timestamp.pb
 
+	
 protofiles/generated/messages.pb.c: protofiles/messages.proto
 	protoc -I=protofiles -oprotofiles/generated/messages.pb  protofiles/messages.proto
 	python3 depend/nanopb/generator/nanopb_generator.py protofiles/generated/messages.pb
