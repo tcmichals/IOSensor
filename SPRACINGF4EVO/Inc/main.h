@@ -63,6 +63,22 @@
 #define SD_CARD_DETECT_GPIO_Port GPIOC
 #define LED0_Pin GPIO_PIN_0
 #define LED0_GPIO_Port GPIOA
+#define ESC8_TIM3_CH3_Pin GPIO_PIN_0
+#define ESC8_TIM3_CH3_GPIO_Port GPIOB
+#define ESC7_TIM3_CH4_Pin GPIO_PIN_1
+#define ESC7_TIM3_CH4_GPIO_Port GPIOB
+#define ESC1_TIM8_CH1_Pin GPIO_PIN_6
+#define ESC1_TIM8_CH1_GPIO_Port GPIOC
+#define ES2_TIM8_CH2_Pin GPIO_PIN_7
+#define ES2_TIM8_CH2_GPIO_Port GPIOC
+#define ES3_TIM8_CH3_Pin GPIO_PIN_8
+#define ES3_TIM8_CH3_GPIO_Port GPIOC
+#define ES4_TIM8_CH4_Pin GPIO_PIN_9
+#define ES4_TIM8_CH4_GPIO_Port GPIOC
+#define ESC5_TIM4_CH1_Pin GPIO_PIN_6
+#define ESC5_TIM4_CH1_GPIO_Port GPIOB
+#define ESC6_TIM4_CH2_Pin GPIO_PIN_7
+#define ESC6_TIM4_CH2_GPIO_Port GPIOB
 
 /* ########################## Assert Selection ############################## */
 /**
