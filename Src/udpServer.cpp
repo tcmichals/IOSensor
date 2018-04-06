@@ -43,6 +43,14 @@ static std::array<StackType_t, STACK_SIZE_PHANDLER> stackPHandlerUDPServer;
 
 #define UDP_PORT_IO 56000
 
+            typedef 
+                struct
+                {
+                    int index;
+                    std::array<uint32_t, 10> servoValue;
+                }dataservos_t;
+            dataservos_t servos;
+            
 class udpServer
 {
 
@@ -272,19 +280,23 @@ inline int udpServer::socketThread(struct pt* pt, struct pbuf* pBuf)
                 
             pb_istream_t input = pb_istream_from_buffer(m_inputBuffer.data(), lenCopied);
                 
-            UdpMessage request= {};
-            if (false == pb_decode_delimited(&input, UdpMessage_fields, &request))
-            {
-                SYSLOGMSG(LogMsg_Debug, "%s:%d: DECODE FAILED", __PRETTY_FUNCTION__, __LINE__);
-                //free packet
-                pbuf_free(pBuf);
-                break;
+            UdpMessage request= UdpMessage_init_default;
+            servos.index =0;
+            
+           if (false == pb_decode_delimited(&input, UdpMessage_fields, &request))
+           {
+                    SYSLOGMSG(LogMsg_Debug, "%s:%d: DECODE FAILED", __PRETTY_FUNCTION__, __LINE__);
+                    //free packet
+                    pbuf_free(pBuf);
+                    break;
             }
             
             if ( xQueueSend(m_msgQueueHandle , &request, 0))
             {
-                SYSLOGMSG(LogMsg_Debug, "%s:%d: POST FAILED", __PRETTY_FUNCTION__, __LINE__);
+                    SYSLOGMSG(LogMsg_Debug, "%s:%d: POST FAILED", __PRETTY_FUNCTION__, __LINE__);
             }
+        
+
             //free packet.. 
             pbuf_free(pBuf);
 
@@ -424,6 +436,12 @@ void udpServer::freeRTOSThread(void* arg)
                      pingMsg.which_message = UdpMessage_pingResp_tag;
                      //send .. 
                      routeMsg(pingMsg);
+                 }
+                 break;
+                 
+                 case UdpMessage_servoReq_tag:
+                 {
+                     
                  }
                  break;
               
