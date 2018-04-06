@@ -41,6 +41,8 @@ static StaticTask_t gUDPServicesTskHandleStatic;
 static TaskHandle_t gUDPServicesTskHandle;
 static std::array<StackType_t, STACK_SIZE_PHANDLER> stackPHandlerUDPServer;
 
+extern "C" bool setservo(size_t channel, size_t value);
+
 #define UDP_PORT_IO 56000
 
             typedef 
@@ -441,7 +443,15 @@ void udpServer::freeRTOSThread(void* arg)
                  
                  case UdpMessage_servoReq_tag:
                  {
-                     
+                    setservo(0,msg.message.servoReq.ch1);
+                    setservo(1,msg.message.servoReq.ch2);
+                    setservo(2,msg.message.servoReq.ch3);
+                    setservo(3,msg.message.servoReq.ch4);
+                    setservo(4,msg.message.servoReq.ch5);
+                    setservo(5,msg.message.servoReq.ch6);
+                    setservo(6,msg.message.servoReq.ch7);                           
+                    setservo(7,msg.message.servoReq.ch8);
+                             
                  }
                  break;
               

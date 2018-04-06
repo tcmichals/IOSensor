@@ -78,6 +78,12 @@ UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
 /* Private variables ---------------------------------------------------------*/
+
+#define SERVO_PWM_MAX_RATE (500)
+#define SERVO_PWM_MIN_RATE (50)
+
+#define PWM_PEROID (1000000)
+
 spiWrapper_t spi1;
 /* USER CODE END PV */
 
@@ -106,6 +112,53 @@ void HAL_TIM_MspPostInit(TIM_HandleTypeDef *htim);
 /* USER CODE END PFP */
 
 /* USER CODE BEGIN 0 */
+uint32_t get_timer_clock_frequency (void)
+{
+
+  return SystemCoreClock;
+}
+
+
+bool setservo(size_t channel, size_t value)
+{
+    bool rc = true;
+    switch(channel)
+    {
+       case 0: //ESC1_TIM8_CH1_Pin
+            __HAL_TIM_SET_COMPARE(&htim8, TIM_CHANNEL_1, value);
+            break;
+       case 1: //ES2_TIM8_CH2_Pin
+            __HAL_TIM_SET_COMPARE(&htim8, TIM_CHANNEL_2, value);
+            break;
+       case 2: //ES3_TIM8_CH3_Pin
+            __HAL_TIM_SET_COMPARE(&htim8, TIM_CHANNEL_3, value);
+             break;
+       case 3://ES4_TIM8_CH4_Pin
+            __HAL_TIM_SET_COMPARE(&htim8, TIM_CHANNEL_4, value);
+             break;
+       case 4: //ESC5_TIM4_CH1_Pin
+             __HAL_TIM_SET_COMPARE(&htim4, TIM_CHANNEL_1, value);
+             break;
+       case 5: //ESC6_TIM4_CH2_Pin
+            __HAL_TIM_SET_COMPARE(&htim4, TIM_CHANNEL_2, value);
+             break;
+       case 6: //ESC7_TIM3_CH4_Pin
+            __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_3, value);
+             break;
+       case 7: //ESC8_TIM3_CH3_Pin
+            __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, value);
+        
+            break;
+            
+        default:
+            rc = false;
+        
+        
+    }
+    
+    return rc;
+        
+}
 
 #define GYRO_ACL_SPI 0
 #define SDCARD_SPI 1
@@ -412,11 +465,11 @@ static void MX_TIM3_Init(void)
   TIM_ClockConfigTypeDef sClockSourceConfig;
   TIM_MasterConfigTypeDef sMasterConfig;
   TIM_OC_InitTypeDef sConfigOC;
-
+  
   htim3.Instance = TIM3;
-  htim3.Init.Prescaler = 0;
+  htim3.Init.Prescaler = (SERVO_PWM_MAX_RATE -1) & 0xFFFF;
   htim3.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim3.Init.Period = 0;
+  htim3.Init.Period =  (get_timer_clock_frequency()/ PWM_PEROID) -1;
   htim3.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   if (HAL_TIM_Base_Init(&htim3) != HAL_OK)
   {
@@ -468,9 +521,9 @@ static void MX_TIM4_Init(void)
   TIM_OC_InitTypeDef sConfigOC;
 
   htim4.Instance = TIM4;
-  htim4.Init.Prescaler = 0;
+  htim4.Init.Prescaler = (SERVO_PWM_MAX_RATE -1) & 0xFFFF;
   htim4.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim4.Init.Period = 0;
+  htim4.Init.Period =  (get_timer_clock_frequency()/ PWM_PEROID) -1;
   htim4.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   if (HAL_TIM_Base_Init(&htim4) != HAL_OK)
   {
@@ -523,9 +576,9 @@ static void MX_TIM8_Init(void)
   TIM_BreakDeadTimeConfigTypeDef sBreakDeadTimeConfig;
 
   htim8.Instance = TIM8;
-  htim8.Init.Prescaler = 0;
+  htim8.Init.Prescaler = (SERVO_PWM_MAX_RATE -1) & 0xFFFF;
   htim8.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim8.Init.Period = 0;
+  htim8.Init.Period = (get_timer_clock_frequency()/ PWM_PEROID) -1;
   htim8.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim8.Init.RepetitionCounter = 0;
   if (HAL_TIM_Base_Init(&htim8) != HAL_OK)
