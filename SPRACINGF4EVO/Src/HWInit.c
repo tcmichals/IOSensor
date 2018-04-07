@@ -79,10 +79,8 @@ UART_HandleTypeDef huart2;
 /* USER CODE BEGIN PV */
 /* Private variables ---------------------------------------------------------*/
 
-#define SERVO_PWM_MAX_RATE (500)
-#define SERVO_PWM_MIN_RATE (50)
 
-#define PWM_PEROID (1000000)
+#define PWM_PEROID (20000)
 
 spiWrapper_t spi1;
 /* USER CODE END PV */
@@ -112,10 +110,65 @@ void HAL_TIM_MspPostInit(TIM_HandleTypeDef *htim);
 /* USER CODE END PFP */
 
 /* USER CODE BEGIN 0 */
-uint32_t get_timer_clock_frequency (void)
+uint32_t APB1TimePWM()
 {
+  RCC_ClkInitTypeDef    clkconfig;
+  uint32_t              uwTimclock, uwAPB1Prescaler = 0U;
+  uint32_t              pFLatency;
+  
+      /* Get clock configuration */
+  HAL_RCC_GetClockConfig(&clkconfig, &pFLatency);
+  
+  /* Get APB1 prescaler */
+  uwAPB1Prescaler = clkconfig.APB1CLKDivider;
+  
+  /* Compute TIM6 clock */
+  if (uwAPB1Prescaler == RCC_HCLK_DIV1) 
+  {
+    uwTimclock = HAL_RCC_GetPCLK1Freq();
+  }
+  else
+  {
+    uwTimclock = 2*HAL_RCC_GetPCLK1Freq();
+  }
+  
+  return   (uint32_t) ((uwTimclock / 1000000) - 1U);
+  
+}
 
-  return SystemCoreClock;
+uint32_t APB2TimePWM()
+{
+     RCC_ClkInitTypeDef    clkconfig;
+  uint32_t              uwTimclock, uwAPB2Prescaler = 0U;
+  uint32_t              pFLatency;
+  
+      /* Get clock configuration */
+  HAL_RCC_GetClockConfig(&clkconfig, &pFLatency);
+  
+  /* Get APB1 prescaler */
+  uwAPB2Prescaler = clkconfig.APB2CLKDivider;
+  
+  /* Compute TIM6 clock */
+
+  switch(uwAPB2Prescaler)
+  {
+      case RCC_HCLK_DIV1:
+           uwTimclock = HAL_RCC_GetPCLK2Freq();
+          break;
+      case  RCC_HCLK_DIV2:
+        uwTimclock = HAL_RCC_GetPCLK2Freq()*2;
+        break;
+      case  RCC_HCLK_DIV4:
+        uwTimclock = HAL_RCC_GetPCLK2Freq() *4;
+        break;
+    
+      case  RCC_HCLK_DIV8:
+        uwTimclock = HAL_RCC_GetPCLK2Freq() *8;
+        break;
+  }
+
+  
+  return   (uint32_t) ((uwTimclock / 1000000) - 1U); 
 }
 
 
@@ -146,7 +199,7 @@ bool setservo(size_t channel, size_t value)
             __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_3, value);
              break;
        case 7: //ESC8_TIM3_CH3_Pin
-            __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, value);
+            __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_4, value);
         
             break;
             
@@ -268,6 +321,51 @@ int hwInit(void)
   MX_TIM4_Init();
   /* USER CODE BEGIN 2 */
 
+   if (HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_3) != HAL_OK)
+  {
+    /* PWM Generation Error */
+    Error_Handler();
+  }
+
+  if (HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_4) != HAL_OK)
+  {
+    /* PWM Generation Error */
+    Error_Handler();
+  }
+
+  if (HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_1) != HAL_OK)
+  {
+    /* PWM Generation Error */
+    Error_Handler();
+  }
+  
+  if (HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_2) != HAL_OK)
+  {
+    /* PWM Generation Error */
+    Error_Handler();
+  }
+  
+  if (HAL_TIM_PWM_Start(&htim8, TIM_CHANNEL_1) != HAL_OK)
+  {
+    /* PWM Generation Error */
+    Error_Handler();
+  }
+  if (HAL_TIM_PWM_Start(&htim8, TIM_CHANNEL_2) != HAL_OK)
+  {
+    /* PWM Generation Error */
+    Error_Handler();
+  }
+  if (HAL_TIM_PWM_Start(&htim8, TIM_CHANNEL_3) != HAL_OK)
+  {
+    /* PWM Generation Error */
+    Error_Handler();
+  }
+  if (HAL_TIM_PWM_Start(&htim8, TIM_CHANNEL_4) != HAL_OK)
+  {
+    /* PWM Generation Error */
+    Error_Handler();
+  }  
+  
   /* USER CODE END 2 */
 
   /* USER CODE BEGIN RTOS_MUTEX */
@@ -467,9 +565,9 @@ static void MX_TIM3_Init(void)
   TIM_OC_InitTypeDef sConfigOC;
   
   htim3.Instance = TIM3;
-  htim3.Init.Prescaler = (SERVO_PWM_MAX_RATE -1) & 0xFFFF;
+  htim3.Init.Prescaler = APB1TimePWM();
   htim3.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim3.Init.Period =  (get_timer_clock_frequency()/ PWM_PEROID) -1;
+  htim3.Init.Period =  PWM_PEROID;
   htim3.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   if (HAL_TIM_Base_Init(&htim3) != HAL_OK)
   {
@@ -495,7 +593,7 @@ static void MX_TIM3_Init(void)
   }
 
   sConfigOC.OCMode = TIM_OCMODE_PWM1;
-  sConfigOC.Pulse = 0;
+  sConfigOC.Pulse = 1500;
   sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
   sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
   if (HAL_TIM_PWM_ConfigChannel(&htim3, &sConfigOC, TIM_CHANNEL_3) != HAL_OK)
@@ -521,9 +619,9 @@ static void MX_TIM4_Init(void)
   TIM_OC_InitTypeDef sConfigOC;
 
   htim4.Instance = TIM4;
-  htim4.Init.Prescaler = (SERVO_PWM_MAX_RATE -1) & 0xFFFF;
+  htim4.Init.Prescaler = APB1TimePWM();
   htim4.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim4.Init.Period =  (get_timer_clock_frequency()/ PWM_PEROID) -1;
+  htim4.Init.Period =  PWM_PEROID;
   htim4.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   if (HAL_TIM_Base_Init(&htim4) != HAL_OK)
   {
@@ -549,7 +647,7 @@ static void MX_TIM4_Init(void)
   }
 
   sConfigOC.OCMode = TIM_OCMODE_PWM1;
-  sConfigOC.Pulse = 0;
+  sConfigOC.Pulse = 1500;
   sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
   sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
   if (HAL_TIM_PWM_ConfigChannel(&htim4, &sConfigOC, TIM_CHANNEL_1) != HAL_OK)
@@ -576,9 +674,9 @@ static void MX_TIM8_Init(void)
   TIM_BreakDeadTimeConfigTypeDef sBreakDeadTimeConfig;
 
   htim8.Instance = TIM8;
-  htim8.Init.Prescaler = (SERVO_PWM_MAX_RATE -1) & 0xFFFF;
+  htim8.Init.Prescaler = APB2TimePWM();
   htim8.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim8.Init.Period = (get_timer_clock_frequency()/ PWM_PEROID) -1;
+  htim8.Init.Period = PWM_PEROID;
   htim8.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim8.Init.RepetitionCounter = 0;
   if (HAL_TIM_Base_Init(&htim8) != HAL_OK)
@@ -605,7 +703,7 @@ static void MX_TIM8_Init(void)
   }
 
   sConfigOC.OCMode = TIM_OCMODE_PWM1;
-  sConfigOC.Pulse = 0;
+  sConfigOC.Pulse = 1500;
   sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
   sConfigOC.OCNPolarity = TIM_OCNPOLARITY_HIGH;
   sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;

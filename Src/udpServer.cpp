@@ -451,6 +451,15 @@ void udpServer::freeRTOSThread(void* arg)
                     setservo(5,msg.message.servoReq.ch6);
                     setservo(6,msg.message.servoReq.ch7);                           
                     setservo(7,msg.message.servoReq.ch8);
+                    
+                     //turn around the message .. 
+                     UdpMessage servoMsg;
+                     
+                     memset(&servoMsg, 0, sizeof(servoMsg));
+                     servoMsg.id = msg.id;
+                     servoMsg.which_message = UdpMessage_servoReq_tag;
+                     //send .. 
+                     routeMsg(servoMsg);
                              
                  }
                  break;
