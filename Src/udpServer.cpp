@@ -456,6 +456,7 @@ void udpServer::freeRTOSThread(void* arg)
                      UdpMessage servoMsg;
                      
                      memset(&servoMsg, 0, sizeof(servoMsg));
+                     servoMsg.type = MessageType_Response;
                      servoMsg.id = msg.id;
                      servoMsg.which_message = UdpMessage_servoReq_tag;
                      //send .. 
