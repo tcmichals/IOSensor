@@ -146,15 +146,24 @@ class udpServer
     bool sendCmdTolwIP(const lwipArgs_t &msg );
 };
 
+/**
+ * @brief 
+ */
 inline udpServer::udpServer(): udpServer_pcb(nullptr)
 {
     memset(&m_ipLastAddr, 0, sizeof(m_ipLastAddr));
 }
 
+/**
+ * @brief 
+ */
 inline udpServer::~udpServer()
 {
 }
 
+/**
+ * @brief 
+ */
 inline void udpServer::createSocket()
 {
     udpServer_pcb = udp_new_ip_type(IPADDR_TYPE_ANY);
@@ -193,6 +202,12 @@ inline void udpServer::createSocket()
     }
 }
 
+/**
+ * @brief 
+ * @param pt
+ * @param args
+ * @return 
+ */
 inline int udpServer::cmdThread(struct pt* pt, lwipArgs_t* args)
 {
     PT_BEGIN(pt);
@@ -213,6 +228,7 @@ inline int udpServer::cmdThread(struct pt* pt, lwipArgs_t* args)
         {
             if(m_ipLastAddr.addr && udpServer_pcb)
             {
+				int rc = 0;
                 //encode message
                 memset(m_outputBuffer.data(), 0, m_outputBuffer.size());
                 pb_ostream_t stream = pb_ostream_from_buffer(m_outputBuffer.data(), m_outputBuffer.size());
@@ -223,20 +239,30 @@ inline int udpServer::cmdThread(struct pt* pt, lwipArgs_t* args)
                     
                     //copy user buffer into UDP
                     bool _free = true;
+					if ( stream.bytes_written > 100)
+						while(1)
+						SYSLOGMSG(LogMsg_Debug, "%s:%d: len=%d", __PRETTY_FUNCTION__, __LINE__, stream.bytes_written);
                     if (pbufMsg)
                     {
-                        if (ERR_OK == pbuf_take(pbufMsg, m_outputBuffer.data(), stream.bytes_written))
+                        if (ERR_OK == (rc =pbuf_take(pbufMsg, m_outputBuffer.data(), stream.bytes_written)))
                         {
-                            if(ERR_OK == udp_sendto(udpServer_pcb, pbufMsg, &m_ipLastAddr,  m_pastPort))
+                            if(ERR_OK == (rc =udp_sendto(udpServer_pcb, pbufMsg, &m_ipLastAddr,  m_pastPort)))
                             {
                                 m_transportActive = true;
                                 _free = false;
                             }
+							else
+							{
+								SYSLOGMSG(LogMsg_Debug, "%s:%d: udp_sendto failed rc=%d", __PRETTY_FUNCTION__, __LINE__, rc);
+							}
                         }
                         
                         if (_free)
+						{
+							SYSLOGMSG(LogMsg_Debug, "%s:%d: pbuf_take failed rc=%d", __PRETTY_FUNCTION__, __LINE__, rc);
                             pbuf_free(pbufMsg);  //free pbuff
-                    }
+						}
+					}
                 }
             }
             else
@@ -255,6 +281,12 @@ inline int udpServer::cmdThread(struct pt* pt, lwipArgs_t* args)
     PT_END(pt);
 }
 
+/**
+ * @brief 
+ * @param pt
+ * @param pBuf
+ * @return 
+ */
 inline int udpServer::socketThread(struct pt* pt, struct pbuf* pBuf)
 {
     PT_BEGIN(pt);
@@ -263,7 +295,6 @@ inline int udpServer::socketThread(struct pt* pt, struct pbuf* pBuf)
     {
         if(pBuf)
         {
-
             u16_t lenCopied = pbuf_copy_partial(pBuf, m_inputBuffer.data(),
                                                 std::min(m_inputBuffer.size(), (size_t)pBuf->tot_len), 0);
                 
@@ -271,7 +302,10 @@ inline int udpServer::socketThread(struct pt* pt, struct pbuf* pBuf)
                 
             UdpMessage request= UdpMessage_init_default;
             memset(&request, 0, sizeof(request));
-            
+			
+			if (pBuf->tot_len > 40)
+				SYSLOGMSG(LogMsg_Debug, "%s:%d: len=%d", __PRETTY_FUNCTION__, __LINE__, pBuf->tot_len);
+           
            if (false == pb_decode_delimited(&input, UdpMessage_fields, &request))
            {
                     //free packet
@@ -293,6 +327,10 @@ inline int udpServer::socketThread(struct pt* pt, struct pbuf* pBuf)
     PT_END(pt);
 }
 
+/**
+ * @brief 
+ * @return 
+ */
 inline udpServer::lwipArgs_t* udpServer::allocArgs()
 {
     lwipArgs_t* rc = nullptr;
@@ -304,9 +342,18 @@ inline udpServer::lwipArgs_t* udpServer::allocArgs()
 
     xSemaphoreGive(m_mutex);
 
+	if (rc == nullptr)
+	{
+		SYSLOGMSG(LogMsg_Debug, "%s:%d: Error nullptr", __PRETTY_FUNCTION__, __LINE__);
+	}
+	
     return rc;
 }
 
+/**
+ * @brief 
+ * @param arg
+ */
 inline void udpServer::freeArgs(lwipArgs_t* arg)
 {
     if(arg && xSemaphoreTake(m_mutex, portMAX_DELAY))
@@ -314,8 +361,18 @@ inline void udpServer::freeArgs(lwipArgs_t* arg)
         m_msgRingBuffer.push(arg);
         xSemaphoreGive(m_mutex);
     }
+	else
+	{
+        SYSLOGMSG(LogMsg_Debug, "%s:%d: Error nullptr", __PRETTY_FUNCTION__, __LINE__);
+	}
+
 }
 
+/**
+ * @brief 
+ * @param msg
+ * @return 
+ */
 inline 
 bool udpServer::sendCmdTolwIP(const lwipArgs_t &msg)
 {
@@ -350,7 +407,11 @@ bool udpServer::sendCmdTolwIP(const lwipArgs_t &msg)
     return true;
 }
 
-
+/**
+ * @brief 
+ * @param msg
+ * @return 
+ */
 bool udpServer::routeMsg(const  UdpMessage &msg ) 
 {
     lwipArgs_t args;
@@ -365,9 +426,11 @@ bool udpServer::routeMsg(const  UdpMessage &msg )
     return sendCmdTolwIP(args);
 }
 
-     
 
-
+/**
+ * @brief 
+ * @param arg
+ */
 void udpServer::freeRTOSThread(void* arg)
 {
 

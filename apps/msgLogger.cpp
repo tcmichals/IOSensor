@@ -64,7 +64,7 @@ logMsgLevel_t getLogMsgLevel()
     
 }
 
-
+jjj
 bool logMsg(logMsgLevel_t level, const char *format, ...)
 {
   logMsg_t *pLogMsg = nullptr;
