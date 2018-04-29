@@ -270,6 +270,9 @@ a lot of data that needs to be copied, this should be set high. */
 #define PBUF_LINK_ENCAPSULATION_HLEN 4
 /* USER CODE END 1 */
 
+
+#define LWIP_TCPIP_CORE_LOCKING 1
+#define LWIP_TCPIP_CORE_LOCKING_INPUT   1
 #ifdef __cplusplus
 }
 #endif
