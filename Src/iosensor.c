@@ -1,10 +1,13 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include <stdarg.h>
+
 #include "main.h"
 #include "stm32f4xx_hal.h"
 #include "cmsis_os.h"
 #include "usb_device.h"
+#include "msgLogger.h"
 
 extern int hwInit(void); 
 extern bool isUSBLinkActive(void);
@@ -12,8 +15,22 @@ extern bool isUSBLinkActive(void);
 osThreadId defaultTaskHandle;
 void StartDefaultTask(void const * argument);
 
+const int uxTopUsedPriority = configMAX_PRIORITIES;
 
+void lwipPrintf(const char *pFormat, ...)
+{
+	char debugStr[128];
 
+	memset(debugStr, 0, sizeof(debugStr));
+
+	va_list aptr;
+	va_start(aptr, pFormat);
+	int len = vsnprintf(debugStr, sizeof(debugStr), pFormat, aptr);
+	va_end(aptr);
+
+	logMsg(LogMsg_Debug, debugStr);
+
+}
 
 void StartDefaultTask(void const * argument)
 {

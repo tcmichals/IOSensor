@@ -79,8 +79,9 @@
 #define PACK_STRUCT_FIELD(x) x
 
 #endif
-
-#define LWIP_PLATFORM_ASSERT(x) //do { if(!(x)) while(1); } while(0)
+void lwipPrintf(const char *pMsg, ...);
+#define LWIP_PLATFORM_ASSERT(x) do {lwipPrintf("Assertion \"%s\" failed at line %d in %s\n", \
+                                     x, __LINE__, __FILE__); abort();} while(0)
 
 #define LWIP_RAND() ((u32_t)rand())
 

@@ -26,6 +26,7 @@
 
 #include "usbd_eem_if.h"
 extern "C" {
+#include "lwip/sys.h"    
 #include "lwip/timeouts.h"
 #include "netif/ethernet.h"
 #include "netif/etharp.h"
@@ -418,17 +419,51 @@ static err_t low_level_output(struct netif* netif, struct pbuf* p)
     lwipMsg.pPkt = nullptr;
     lwipMsg.pTxPkt = p;
 
+    pbuf_ref(p);
     if(!xQueueSend(pbufQueue, &lwipMsg, 0))
     {
         logMsg(LogMsg_Debug, "ERROR %s %d p->ref=%d", __PRETTY_FUNCTION__, __LINE__, p->ref);
         rc = ERR_MEM;
-    }
-    else
-    {
-        pbuf_ref(p);
+	//need to remove the reference 
+	pbuf_free(p);
     }
 
+
     return rc; // errval;
+}
+
+
+
+static bool localTx(lwipMsg_t &lwipMsg, eem_pktInfo_t &eemTxPkt)
+{
+    
+    
+    memset(&eemTxPkt, 0, sizeof(eemTxPkt));
+    eemTxPkt.pktLen = lwipMsg.pTxPkt->tot_len + sizeof(uint16_t) + sizeof(uint32_t);
+    uint32_t lenCopied = pbuf_copy_partial(lwipMsg.pTxPkt, txEEMPkt + sizeof(uint16_t), lwipMsg.pTxPkt->tot_len, 0);
+            
+    pbuf_free(lwipMsg.pTxPkt);
+            
+    lwipMsg.pTxPkt = nullptr;
+
+    uint16_t* pTxEEMHdr = reinterpret_cast<uint16_t*>(txEEMPkt);
+
+    *pTxEEMHdr = lenCopied + sizeof(uint32_t);
+    eemTxPkt.pPkt = txEEMPkt;
+
+    uint8_t* pCRC = txEEMPkt + lenCopied + sizeof(uint16_t);
+    *pCRC++ = 0xde;
+    *pCRC++ = 0xad;
+    *pCRC++ = 0xbe;
+    *pCRC++ = 0xef;
+
+    USBD_EEM_SetTxBuffer(&hUsbDeviceFS, txEEMPkt, eemTxPkt.pktLen);
+    if(USBD_OK != USBD_EEM_TransmitPacket(&hUsbDeviceFS))
+    {
+        logMsg(LogMsg_Debug, "%s %d lwipTxStart_t error", __PRETTY_FUNCTION__, __LINE__);
+        return false;
+    }
+    return true;
 }
 
 /**
@@ -472,7 +507,7 @@ void ethernetif_input(void const* argument)
             if ( gWorkPkt >= MAX_EEM_POOL)
                 gWorkPkt =0;
 
- //TCM           logMsg(LogMsg_Debug, "%s %d lwipRX_t", __PRETTY_FUNCTION__, __LINE__);
+            logMsg(LogMsg_Debug, "%s %d lwipRX_t", __PRETTY_FUNCTION__, __LINE__);
             
             // fire off another request while processing current pkt.
             uint32_t _regs = taskENTER_CRITICAL_FROM_ISR();
@@ -526,17 +561,19 @@ void ethernetif_input(void const* argument)
                     }
                     else // is a packet
                     {
-                        // bool isCRC = (EEM_IS_PKT_CRC & eemHdr) ? true : false;
                         int lenOfPkt = EEM_PKT_LEN_MASK & eemHdr;
 
                         if(nullptr == (eemRx.p = pbuf_alloc(PBUF_RAW, lenOfPkt, PBUF_POOL)))
                         {
                             logMsg(LogMsg_Debug, "%s %d pktRx ERROR pbuf_alloc failed", __PRETTY_FUNCTION__, __LINE__);
+                            eemRx.pktLen = 0;
                         }
-
-                        eemRx.pktLen = lenOfPkt;
+                        else
+                        {
+                            eemRx.pktLen = lenOfPkt;
+                        }
+                        
                         eemRx.pktToGo = 0;
-
                         continue;
                     }
                 }
@@ -552,7 +589,7 @@ void ethernetif_input(void const* argument)
 
                     if(eemRx.pktLen == eemRx.pktToGo)
                     {
-                //TCM        logMsg(LogMsg_Debug, "%s %d RX", __PRETTY_FUNCTION__, __LINE__);
+                        logMsg(LogMsg_Debug, "%s %d RX", __PRETTY_FUNCTION__, __LINE__);
 
                         if(eemRx.p && netif->input(eemRx.p, netif) != ERR_OK)
                         {
@@ -561,18 +598,15 @@ void ethernetif_input(void const* argument)
                         }
                         else
                         {
-                            if(eemRx.p)
-                                pbuf_free(eemRx.p);
-                            eemRx.p = nullptr;
-                            eemRx.pktToGo = 0;
-                            eemRx.pktLen = 0;
-                        }
+                          //  if(eemRx.p)
+                            //    pbuf_free(eemRx.p);
+                         }
+                        eemRx.p 	= nullptr;
+                        eemRx.pktToGo 	= 0;
+                        eemRx.pktLen 	= 0;
                     }
                 }
-                
             } while(remainingBytes > 0);
-
-
         }
         break;
 
@@ -580,7 +614,7 @@ void ethernetif_input(void const* argument)
         {
             if(eemTxPkt.pPkt != nullptr)
             {
-               //TCM logMsg(LogMsg_Debug, "%s %d lwipTxStart_t queue", __PRETTY_FUNCTION__, __LINE__);
+               logMsg(LogMsg_Debug, "%s %d lwipTxStart_t queue", __PRETTY_FUNCTION__, __LINE__);
 
                 if(false == eemTxRingBuffer.push(lwipMsg.pTxPkt))
                 {
@@ -590,38 +624,33 @@ void ethernetif_input(void const* argument)
                 continue;
             }
 
-            memset(&eemTxPkt, 0, sizeof(eemTxPkt));
-            eemTxPkt.pktLen = lwipMsg.pTxPkt->tot_len + sizeof(uint16_t) + sizeof(uint32_t);
-            uint32_t lenCopied =
-                pbuf_copy_partial(lwipMsg.pTxPkt, txEEMPkt + sizeof(uint16_t), lwipMsg.pTxPkt->tot_len, 0);
-            pbuf_free(lwipMsg.pTxPkt);
-
-            uint16_t* pTxEEMHdr = reinterpret_cast<uint16_t*>(txEEMPkt);
-
-            *pTxEEMHdr = lenCopied + sizeof(uint32_t);
-            eemTxPkt.pPkt = txEEMPkt;
-
-            uint8_t* pCRC = txEEMPkt + lenCopied + sizeof(uint16_t);
-            *pCRC++ = 0xde;
-            *pCRC++ = 0xad;
-            *pCRC++ = 0xbe;
-            *pCRC++ = 0xef;
-
-            lenCopied += sizeof(uint32_t) +
-
-            USBD_EEM_SetTxBuffer(&hUsbDeviceFS, txEEMPkt, eemTxPkt.pktLen);
-            if(USBD_OK != USBD_EEM_TransmitPacket(&hUsbDeviceFS))
+            if (false == localTx(lwipMsg, eemTxPkt))
             {
-                logMsg(LogMsg_Debug, "%s %d lwipTxStart_t error", __PRETTY_FUNCTION__, __LINE__);
+                //drop packet
+                memset(&eemTxPkt, 0, sizeof(eemTxPkt));
             }
+         
         }
         break;
 
         case lwipRequest::eemUSBTxDone_t:
         {
-            //  logMsg(LogMsg_Debug, "%s %d eemUSBTxDone_t %d ", __PRETTY_FUNCTION__, __LINE__, lwipMsg.pktSize);
-
+            logMsg(LogMsg_Debug, "%s %d eemUSBTxDone_t %d ", __PRETTY_FUNCTION__, __LINE__, lwipMsg.pktSize);
             memset(&eemTxPkt, 0, sizeof(eemTxPkt));
+            
+            //OK 
+             while(true == eemTxRingBuffer.pop(lwipMsg.pTxPkt))
+             {
+                 if (false == localTx(lwipMsg, eemTxPkt))
+                 {
+                      memset(&eemTxPkt, 0, sizeof(eemTxPkt));  //drop pkt..
+                      continue;  // get next packet ..  
+                 }
+                 else
+                 {
+                     break; //continue to process tx pkt.. 
+                 }
+             }
         }
         break;
 

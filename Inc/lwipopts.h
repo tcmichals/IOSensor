@@ -193,17 +193,17 @@ a lot of data that needs to be copied, this should be set high. */
 
 
 /*----- Value in opt.h for TCPIP_THREAD_STACKSIZE: 0 -----*/
-#define TCPIP_THREAD_STACKSIZE 1024
+#define TCPIP_THREAD_STACKSIZE 2048
 /*----- Value in opt.h for TCPIP_THREAD_PRIO: 1 -----*/
 #define TCPIP_THREAD_PRIO 3
 /*----- Value in opt.h for TCPIP_MBOX_SIZE: 0 -----*/
 #define TCPIP_MBOX_SIZE 6
 /*----- Value in opt.h for SLIPIF_THREAD_STACKSIZE: 0 -----*/
-#define SLIPIF_THREAD_STACKSIZE 1024
+#define SLIPIF_THREAD_STACKSIZE 2048
 /*----- Value in opt.h for SLIPIF_THREAD_PRIO: 1 -----*/
 #define SLIPIF_THREAD_PRIO 3
 /*----- Value in opt.h for DEFAULT_THREAD_STACKSIZE: 0 -----*/
-#define DEFAULT_THREAD_STACKSIZE 1024
+#define DEFAULT_THREAD_STACKSIZE 2048
 /*----- Value in opt.h for DEFAULT_THREAD_PRIO: 1 -----*/
 #define DEFAULT_THREAD_PRIO 3
 /*----- Value in opt.h for DEFAULT_UDP_RECVMBOX_SIZE: 0 -----*/
@@ -242,7 +242,7 @@ a lot of data that needs to be copied, this should be set high. */
 #define LWIP_CHKSUM_ALGORITHM 3
 #define LWIP_ALLOW_MEM_FREE_FROM_OTHER_CONTEXT 1
 #define TCP_QUEUE_OOSEQ         0
-#if 0
+
 #define NETIF_DEBUG LWIP_DBG_ON
 /*----- Default Value for IP_DEBUG: LWIP_DBG_OFF ---*/
 #define IP_DEBUG LWIP_DBG_ON
@@ -262,17 +262,21 @@ a lot of data that needs to be copied, this should be set high. */
 #define IP_DEBUG LWIP_DBG_ON
 #define PBUF_DEBUG LWIP_DBG_ON
 #define MDNS_DEBUG LWIP_DBG_ON
-//#define LWIP_DBG_TYPES_ON         (LWIP_DBG_ON|LWIP_DBG_TRACE|LWIP_DBG_STATE|LWIP_DBG_FRESH|LWIP_DBG_HALT)
-#undef LWIP_DBG_TYPES_ON
-#endif
+#define LWIP_DBG_TYPES_ON         (LWIP_DBG_ON|LWIP_DBG_TRACE|LWIP_DBG_STATE|LWIP_DBG_FRESH|LWIP_DBG_HALT)
+//#undef LWIP_DBG_TYPES_ON
+
 /*-----------------------------------------------------------------------------*/
 /* USER CODE BEGIN 1 */
 #define PBUF_LINK_ENCAPSULATION_HLEN 4
 /* USER CODE END 1 */
-
-
-#define LWIP_TCPIP_CORE_LOCKING 1
-#define LWIP_TCPIP_CORE_LOCKING_INPUT   1
+#define LWIP_COMPAT_MUTEX 0
+#define SYS_LIGHTWEIGHT_PROT 1
+#define LWIP_FREERTOS_SYS_ARCH_PROTECT_USES_MUTEX 1
+#define LWIP_FREERTOS_SYS_ARCH_PROTECT_SANITY_CHECK 1
+#if 0
+	#define LWIP_TCPIP_CORE_LOCKING 1
+	#define LWIP_TCPIP_CORE_LOCKING_INPUT   1
+#endif
 #ifdef __cplusplus
 }
 #endif

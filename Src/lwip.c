@@ -84,6 +84,7 @@ uint8_t GATEWAY_ADDRESS[4];
 /* USER CODE BEGIN 2 */
 void startApps(void *arg)
 {
+#if 0
 #if LWIP_MDNS_RESPONDER
   mdns_resp_init();
 #if LWIP_NETIF_HOSTNAME
@@ -92,6 +93,7 @@ void startApps(void *arg)
   mdns_resp_add_netif(&gnetif, "quadcopter", 3600);
 #endif
   //Smdns_resp_add_service(netif_default, "lwipweb", "_http", DNSSD_PROTO_TCP, HTTPD_SERVER_PORT, 3600, srv_txt, NULL);
+#endif
 #endif
     
     

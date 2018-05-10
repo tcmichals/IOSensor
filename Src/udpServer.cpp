@@ -184,10 +184,12 @@ inline void udpServer::createSocket()
                          {
                              pServer->m_ipLastAddr = *addr;
                              pServer->m_pastPort = port;
-                             pServer->socketThread(&pServer->m_udpSocketThread, p);
+                            pServer->socketThread(&pServer->m_udpSocketThread, p);
                          }
                          pServer->m_transportActive = true;
-                         //    SYSLOGMSG(LogMsg_Debug, "%s:%d:+", __PRETTY_FUNCTION__, __LINE__);
+                         SYSLOGMSG(LogMsg_Debug, "%s:%d:+", __PRETTY_FUNCTION__, __LINE__);
+                         
+                         pbuf_free(p);
                      },
                      this);
         }
@@ -238,10 +240,7 @@ inline int udpServer::cmdThread(struct pt* pt, lwipArgs_t* args)
                     struct pbuf* pbufMsg = pbuf_alloc(PBUF_TRANSPORT, stream.bytes_written, PBUF_RAM);
                     
                     //copy user buffer into UDP
-                    bool _free = true;
-					if ( stream.bytes_written > 100)
-						while(1)
-						SYSLOGMSG(LogMsg_Debug, "%s:%d: len=%d", __PRETTY_FUNCTION__, __LINE__, stream.bytes_written);
+					SYSLOGMSG(LogMsg_Debug, "%s:%d: len=%d", __PRETTY_FUNCTION__, __LINE__, stream.bytes_written);
                     if (pbufMsg)
                     {
                         if (ERR_OK == (rc =pbuf_take(pbufMsg, m_outputBuffer.data(), stream.bytes_written)))
@@ -249,7 +248,6 @@ inline int udpServer::cmdThread(struct pt* pt, lwipArgs_t* args)
                             if(ERR_OK == (rc =udp_sendto(udpServer_pcb, pbufMsg, &m_ipLastAddr,  m_pastPort)))
                             {
                                 m_transportActive = true;
-                                _free = false;
                             }
 							else
 							{
@@ -257,11 +255,8 @@ inline int udpServer::cmdThread(struct pt* pt, lwipArgs_t* args)
 							}
                         }
                         
-                        if (_free)
-						{
-							SYSLOGMSG(LogMsg_Debug, "%s:%d: pbuf_take failed rc=%d", __PRETTY_FUNCTION__, __LINE__, rc);
-                            pbuf_free(pbufMsg);  //free pbuff
-						}
+                        SYSLOGMSG(LogMsg_Debug, "%s:%d: pbuf_take failed rc=%d", __PRETTY_FUNCTION__, __LINE__, rc);
+                        pbuf_free(pbufMsg);  //free pbuff
 					}
                 }
             }
@@ -302,22 +297,17 @@ inline int udpServer::socketThread(struct pt* pt, struct pbuf* pBuf)
                 
             UdpMessage request= UdpMessage_init_default;
             memset(&request, 0, sizeof(request));
-			
-			if (pBuf->tot_len > 40)
-				SYSLOGMSG(LogMsg_Debug, "%s:%d: len=%d", __PRETTY_FUNCTION__, __LINE__, pBuf->tot_len);
            
            if (false == pb_decode_delimited(&input, UdpMessage_fields, &request))
            {
-                    //free packet
-                    pbuf_free(pBuf);
-                    break;
+                //free packet
+                break;
             }
             
             if ( xQueueSend(m_msgQueueHandle , &request, 0))
             {
             }
             //free packet.. 
-            pbuf_free(pBuf);
         }
 
         PT_YIELD(pt);

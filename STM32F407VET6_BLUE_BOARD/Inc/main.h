@@ -1,7 +1,8 @@
 /**
   ******************************************************************************
-  * File Name          : main.hpp
-  * Description        : This file contains the common defines of the application
+  * @file           : main.h
+  * @brief          : Header for main.c file.
+  *                   This file contains the common defines of the application.
   ******************************************************************************
   * This notice applies to any and all portions of this file
   * that are not between comment pairs USER CODE BEGIN and
@@ -9,7 +10,7 @@
   * inserted by the user or by software development tools
   * are owned by their respective copyright owners.
   *
-  * Copyright (c) 2017 STMicroelectronics International N.V. 
+  * Copyright (c) 2018 STMicroelectronics International N.V. 
   * All rights reserved.
   *
   * Redistribution and use in source and binary forms, with or without 
@@ -45,59 +46,51 @@
   *
   ******************************************************************************
   */
+
 /* Define to prevent recursive inclusion -------------------------------------*/
-#ifndef __MAIN_H
-#define __MAIN_H
-  /* Includes ------------------------------------------------------------------*/
+#ifndef __MAIN_H__
+#define __MAIN_H__
 
 /* Includes ------------------------------------------------------------------*/
+
 /* USER CODE BEGIN Includes */
 
 /* USER CODE END Includes */
 
 /* Private define ------------------------------------------------------------*/
 
-#define PPS_GPS_Pin GPIO_PIN_1
-#define PPS_GPS_GPIO_Port GPIOC
-#define PPS_GPS_EXTI_IRQn EXTI1_IRQn
-#define BAT_IN_Pin GPIO_PIN_0
-#define BAT_IN_GPIO_Port GPIOA
+#define LED_BAR_CS_Pin GPIO_PIN_4
+#define LED_BAR_CS_GPIO_Port GPIOA
 #define LED_BAR_CLOCK_Pin GPIO_PIN_5
 #define LED_BAR_CLOCK_GPIO_Port GPIOA
 #define LED_BAR_DATA_Pin GPIO_PIN_7
 #define LED_BAR_DATA_GPIO_Port GPIOA
-#define M1_Pin GPIO_PIN_9
-#define M1_GPIO_Port GPIOE
-#define M2_Pin GPIO_PIN_11
-#define M2_GPIO_Port GPIOE
-#define M3_Pin GPIO_PIN_13
-#define M3_GPIO_Port GPIOE
-#define M4_Pin GPIO_PIN_14
-#define M4_GPIO_Port GPIOE
+#define ESC1_Pin GPIO_PIN_9
+#define ESC1_GPIO_Port GPIOE
+#define ESC2_Pin GPIO_PIN_11
+#define ESC2_GPIO_Port GPIOE
+#define ESC3_Pin GPIO_PIN_13
+#define ESC3_GPIO_Port GPIOE
+#define ESC4_Pin GPIO_PIN_14
+#define ESC4_GPIO_Port GPIOE
 #define CH1_Pin GPIO_PIN_10
 #define CH1_GPIO_Port GPIOD
-#define CH1_EXTI_IRQn EXTI15_10_IRQn
 #define CH2_Pin GPIO_PIN_11
 #define CH2_GPIO_Port GPIOD
-#define CH2_EXTI_IRQn EXTI15_10_IRQn
 #define CH3_Pin GPIO_PIN_12
 #define CH3_GPIO_Port GPIOD
-#define CH3_EXTI_IRQn EXTI15_10_IRQn
 #define CH4_Pin GPIO_PIN_13
 #define CH4_GPIO_Port GPIOD
-#define CH4_EXTI_IRQn EXTI15_10_IRQn
 #define CH5_Pin GPIO_PIN_14
 #define CH5_GPIO_Port GPIOD
-#define CH5_EXTI_IRQn EXTI15_10_IRQn
 #define CH6_Pin GPIO_PIN_15
 #define CH6_GPIO_Port GPIOD
-#define CH6_EXTI_IRQn EXTI15_10_IRQn
 #define DEBUG_TX_Pin GPIO_PIN_9
 #define DEBUG_TX_GPIO_Port GPIOA
 #define DEBUG_RX_Pin GPIO_PIN_10
 #define DEBUG_RX_GPIO_Port GPIOA
-#define LED_Pin GPIO_PIN_9
-#define LED_GPIO_Port GPIOB
+#define LED0_Pin GPIO_PIN_9
+#define LED0_GPIO_Port GPIOB
 
 /* ########################## Assert Selection ############################## */
 /**
@@ -120,13 +113,6 @@ void _Error_Handler(char *, int);
 }
 #endif
 
-/**
-  * @}
-  */ 
+#endif /* __MAIN_H__ */
 
-/**
-  * @}
-*/ 
-
-#endif /* __MAIN_H */
 /************************ (C) COPYRIGHT STMicroelectronics *****END OF FILE****/

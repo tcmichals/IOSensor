@@ -1,7 +1,8 @@
+
 /**
   ******************************************************************************
-  * File Name          : main.c
-  * Description        : Main program body
+  * @file           : main.c
+  * @brief          : Main program body
   ******************************************************************************
   * This notice applies to any and all portions of this file
   * that are not between comment pairs USER CODE BEGIN and
@@ -9,7 +10,7 @@
   * inserted by the user or by software development tools
   * are owned by their respective copyright owners.
   *
-  * Copyright (c) 2017 STMicroelectronics International N.V. 
+  * Copyright (c) 2018 STMicroelectronics International N.V. 
   * All rights reserved.
   *
   * Redistribution and use in source and binary forms, with or without 
@@ -45,7 +46,6 @@
   *
   ******************************************************************************
   */
-
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "stm32f4xx_hal.h"
@@ -53,50 +53,33 @@
 #include "usb_device.h"
 
 /* USER CODE BEGIN Includes */
-#include "lwip/init.h"
-#include "lwip/netif.h"
-#include "lwip/timeouts.h"
-#include "netif/etharp.h"
-#include "ethernetif.h"
-#include "msgLogger.h"
-#include "startUp.h"
+#include "spiAPI.h"
+#include <stdbool.h>
 /* USER CODE END Includes */
 
 /* Private variables ---------------------------------------------------------*/
 ADC_HandleTypeDef hadc1;
 
-SD_HandleTypeDef hsd;
-
 SPI_HandleTypeDef hspi1;
-DMA_HandleTypeDef hdma_spi1_tx;
 
 TIM_HandleTypeDef htim1;
-TIM_HandleTypeDef htim14;
 
 UART_HandleTypeDef huart1;
-UART_HandleTypeDef huart2;
-DMA_HandleTypeDef hdma_usart1_tx;
-DMA_HandleTypeDef hdma_usart2_tx;
 
 osThreadId defaultTaskHandle;
 
 /* USER CODE BEGIN PV */
 /* Private variables ---------------------------------------------------------*/
-static SemaphoreHandle_t g_completeSerialSema;
-static SemaphoreHandle_t g_completeSPISema;
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
-static void MX_DMA_Init(void);
-static void MX_ADC1_Init(void);
-static void MX_SDIO_SD_Init(void);
-static void MX_SPI1_Init(void);
 static void MX_TIM1_Init(void);
-static void MX_USART2_UART_Init(void);
+static void MX_ADC1_Init(void);
 static void MX_USART1_UART_Init(void);
-static void MX_TIM14_Init(void);
+static void MX_SPI1_Init(void);
 void StartDefaultTask(void const * argument);
 
 void HAL_TIM_MspPostInit(TIM_HandleTypeDef *htim);
@@ -108,12 +91,76 @@ void HAL_TIM_MspPostInit(TIM_HandleTypeDef *htim);
 /* USER CODE END PFP */
 
 /* USER CODE BEGIN 0 */
+bool setservo(size_t channel, size_t value)
+{
+    bool rc = true;
+    switch(channel)
+    {
+       case 0: //ESC1_TIM8_CH1_Pin
+        //    __HAL_TIM_SET_COMPARE(&htim8, TIM_CHANNEL_1, value);
+            break;
+       case 1: //ES2_TIM8_CH2_Pin
+         //   __HAL_TIM_SET_COMPARE(&htim8, TIM_CHANNEL_2, value);
+            break;
+       case 2: //ES3_TIM8_CH3_Pin
+         //   __HAL_TIM_SET_COMPARE(&htim8, TIM_CHANNEL_3, value);
+             break;
+       case 3://ES4_TIM8_CH4_Pin
+           // __HAL_TIM_SET_COMPARE(&htim8, TIM_CHANNEL_4, value);
+             break;
+       case 4: //ESC5_TIM4_CH1_Pin
+          //   __HAL_TIM_SET_COMPARE(&htim4, TIM_CHANNEL_1, value);
+             break;
+       case 5: //ESC6_TIM4_CH2_Pin
+     //       __HAL_TIM_SET_COMPARE(&htim4, TIM_CHANNEL_2, value);
+             break;
+       case 6: //ESC7_TIM3_CH4_Pin
+           // __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_3, value);
+             break;
+       case 7: //ESC8_TIM3_CH3_Pin
+          //  __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_4, value);
+        
+            break;
+            
+        default:
+            rc = false;
+        
+        
+    }
+    
+    return rc;
+        
+}
 
+
+void txSerialPort(char *pStr, int len)
+{
+    for(; len; --len, pStr++)
+    {
+        ITM_SendChar((uint32_t)(*pStr));
+    }
+            
+#if 0
+	if(HAL_UART_Transmit_DMA(&huart1, (uint8_t*)pStr, len)!= HAL_OK)
+    {
+            Error_Handler();
+    }
+    else
+    {
+            xSemaphoreTake( g_completeSerialSema,portMAX_DELAY ) ;
+    }
+#endif
+  
+}
 /* USER CODE END 0 */
 
-int main(void)
+/**
+  * @brief  The application entry point.
+  *
+  * @retval None
+  */
+int hwInit(void)
 {
-
   /* USER CODE BEGIN 1 */
 
   /* USER CODE END 1 */
@@ -136,15 +183,10 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
-  MX_DMA_Init();
-  MX_ADC1_Init();
-  //TCM:TODO MX_SDIO_SD_Init();
-  MX_SPI1_Init();
   MX_TIM1_Init();
-  MX_USART2_UART_Init();
+  MX_ADC1_Init();
   MX_USART1_UART_Init();
-  MX_TIM14_Init();
-
+  MX_SPI1_Init();
   /* USER CODE BEGIN 2 */
 
   /* USER CODE END 2 */
@@ -163,8 +205,8 @@ int main(void)
 
   /* Create the thread(s) */
   /* definition and creation of defaultTask */
-  osThreadDef(defaultTask, StartDefaultTask, osPriorityNormal, 0, 128);
-  defaultTaskHandle = osThreadCreate(osThread(defaultTask), NULL);
+//  osThreadDef(defaultTask, StartDefaultTask, osPriorityNormal, 0, 128);
+//  defaultTaskHandle = osThreadCreate(osThread(defaultTask), NULL);
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
@@ -176,25 +218,45 @@ int main(void)
  
 
   /* Start scheduler */
-  osKernelStart();
+  //TCMosKernelStart();
   
   /* We should never get here as control is now taken by the scheduler */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-  while (1)
+  //TCMwhile (1)
   {
+
   /* USER CODE END WHILE */
 
   /* USER CODE BEGIN 3 */
+  
+      DBGMCU->CR |= DBGMCU_CR_TRACE_IOEN ;
+    CoreDebug->DEMCR = CoreDebug_DEMCR_TRCENA_Msk; /* enable trace in core debug */
+
+#define SPPR_NRZ_ENCODING       (1 <<1)
+#define SPPR_MANCHESER_ENCODING (1 << 0)    
+    TPI->SPPR = SPPR_NRZ_ENCODING;
+
+    TPI->ACPR = (168000000/460800) -1;
+    ITM->LAR= 0xC5ACCE55;
+
+    ITM->TCR = ITM_TCR_TraceBusID_Msk | ITM_TCR_SWOENA_Msk | ITM_TCR_SYNCENA_Msk | ITM_TCR_ITMENA_Msk; /* ITM Trace Control Register */
+    ITM->TPR = ITM_TPR_PRIVMASK_Msk; /* ITM Trace Privilege Register */
+    ITM->TER = 1; /* ITM Trace Enable Register. Enabled tracing on stimulus ports. One bit per stimulus port. */
+
+    DWT->CTRL = 0x400003FE;
+    TPI->FFCR = 0x00000100;
 
   }
   /* USER CODE END 3 */
 
 }
 
-/** System Clock Configuration
-*/
+/**
+  * @brief System Clock Configuration
+  * @retval None
+  */
 void SystemClock_Config(void)
 {
 
@@ -285,29 +347,6 @@ static void MX_ADC1_Init(void)
 
 }
 
-/* SDIO init function */
-static void MX_SDIO_SD_Init(void)
-{
-
-  hsd.Instance = SDIO;
-  hsd.Init.ClockEdge = SDIO_CLOCK_EDGE_RISING;
-  hsd.Init.ClockBypass = SDIO_CLOCK_BYPASS_DISABLE;
-  hsd.Init.ClockPowerSave = SDIO_CLOCK_POWER_SAVE_DISABLE;
-  hsd.Init.BusWide = SDIO_BUS_WIDE_1B;
-  hsd.Init.HardwareFlowControl = SDIO_HARDWARE_FLOW_CONTROL_DISABLE;
-  hsd.Init.ClockDiv = 0;
-  if (HAL_SD_Init(&hsd) != HAL_OK)
-  {
-    _Error_Handler(__FILE__, __LINE__);
-  }
-
-  if (HAL_SD_ConfigWideBusOperation(&hsd, SDIO_BUS_WIDE_4B) != HAL_OK)
-  {
-    _Error_Handler(__FILE__, __LINE__);
-  }
-
-}
-
 /* SPI1 init function */
 static void MX_SPI1_Init(void)
 {
@@ -319,8 +358,8 @@ static void MX_SPI1_Init(void)
   hspi1.Init.DataSize = SPI_DATASIZE_8BIT;
   hspi1.Init.CLKPolarity = SPI_POLARITY_LOW;
   hspi1.Init.CLKPhase = SPI_PHASE_1EDGE;
-  hspi1.Init.NSS = SPI_NSS_SOFT;
-  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_4;
+  hspi1.Init.NSS = SPI_NSS_HARD_OUTPUT;
+  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_2;
   hspi1.Init.FirstBit = SPI_FIRSTBIT_MSB;
   hspi1.Init.TIMode = SPI_TIMODE_DISABLE;
   hspi1.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
@@ -413,41 +452,12 @@ static void MX_TIM1_Init(void)
 
 }
 
-/* TIM14 init function */
-static void MX_TIM14_Init(void)
-{
-  RCC_ClkInitTypeDef    clkconfig;
-  uint32_t              uwTimclock = 0;
-  uint32_t              uwPrescalerValue = 0;
-  uint32_t              pFLatency;
-  
-  /* Get clock configuration */
-  HAL_RCC_GetClockConfig(&clkconfig, &pFLatency);
-  
-  /* Compute TIM14 clock */
-  uwTimclock = 2*HAL_RCC_GetPCLK1Freq();
-  
-    /* Compute the prescaler value to have TIM3 counter clock equal to 1khz */
-  uwPrescalerValue = (uint32_t) ((uwTimclock / 1000000) - 1);
-  
-  htim14.Instance = TIM14;
-  htim14.Init.Prescaler = uwPrescalerValue;  //1Khz.. 
-  htim14.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim14.Init.Period = 0xFFFF;
-  htim14.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
-  if (HAL_TIM_Base_Init(&htim14) != HAL_OK)
-  {
-    _Error_Handler(__FILE__, __LINE__);
-  }
-
-}
-
 /* USART1 init function */
 static void MX_USART1_UART_Init(void)
 {
 
   huart1.Instance = USART1;
-  huart1.Init.BaudRate = 500000;
+  huart1.Init.BaudRate = 115200;
   huart1.Init.WordLength = UART_WORDLENGTH_8B;
   huart1.Init.StopBits = UART_STOPBITS_1;
   huart1.Init.Parity = UART_PARITY_NONE;
@@ -458,47 +468,6 @@ static void MX_USART1_UART_Init(void)
   {
     _Error_Handler(__FILE__, __LINE__);
   }
-
-}
-
-/* USART2 init function */
-static void MX_USART2_UART_Init(void)
-{
-
-  huart2.Instance = USART2;
-  huart2.Init.BaudRate = 115200;
-  huart2.Init.WordLength = UART_WORDLENGTH_8B;
-  huart2.Init.StopBits = UART_STOPBITS_1;
-  huart2.Init.Parity = UART_PARITY_NONE;
-  huart2.Init.Mode = UART_MODE_TX_RX;
-  huart2.Init.HwFlowCtl = UART_HWCONTROL_NONE;
-  huart2.Init.OverSampling = UART_OVERSAMPLING_16;
-  if (HAL_UART_Init(&huart2) != HAL_OK)
-  {
-    _Error_Handler(__FILE__, __LINE__);
-  }
-
-}
-
-/** 
-  * Enable DMA controller clock
-  */
-static void MX_DMA_Init(void) 
-{
-  /* DMA controller clock enable */
-  __HAL_RCC_DMA2_CLK_ENABLE();
-  __HAL_RCC_DMA1_CLK_ENABLE();
-
-  /* DMA interrupt init */
-  /* DMA1_Stream6_IRQn interrupt configuration */
-  HAL_NVIC_SetPriority(DMA1_Stream6_IRQn, 15, 0);
-  HAL_NVIC_EnableIRQ(DMA1_Stream6_IRQn);
-  /* DMA2_Stream3_IRQn interrupt configuration */
-  HAL_NVIC_SetPriority(DMA2_Stream3_IRQn, 15, 0);
-  HAL_NVIC_EnableIRQ(DMA2_Stream3_IRQn);
-  /* DMA2_Stream7_IRQn interrupt configuration */
-  HAL_NVIC_SetPriority(DMA2_Stream7_IRQn, 15, 0);
-  HAL_NVIC_EnableIRQ(DMA2_Stream7_IRQn);
 
 }
 
@@ -515,43 +484,30 @@ static void MX_GPIO_Init(void)
   GPIO_InitTypeDef GPIO_InitStruct;
 
   /* GPIO Ports Clock Enable */
-  __HAL_RCC_GPIOH_CLK_ENABLE();
   __HAL_RCC_GPIOC_CLK_ENABLE();
+  __HAL_RCC_GPIOH_CLK_ENABLE();
   __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOE_CLK_ENABLE();
   __HAL_RCC_GPIOD_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_RESET);
-
-  /*Configure GPIO pin : PPS_GPS_Pin */
-  GPIO_InitStruct.Pin = PPS_GPS_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING;
-  GPIO_InitStruct.Pull = GPIO_PULLUP;
-  HAL_GPIO_Init(PPS_GPS_GPIO_Port, &GPIO_InitStruct);
+  HAL_GPIO_WritePin(LED0_GPIO_Port, LED0_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pins : CH1_Pin CH2_Pin CH3_Pin CH4_Pin 
                            CH5_Pin CH6_Pin */
   GPIO_InitStruct.Pin = CH1_Pin|CH2_Pin|CH3_Pin|CH4_Pin 
                           |CH5_Pin|CH6_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING_FALLING;
-  GPIO_InitStruct.Pull = GPIO_PULLUP;
+  GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOD, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : LED_Pin */
-  GPIO_InitStruct.Pin = LED_Pin;
+  /*Configure GPIO pin : LED0_Pin */
+  GPIO_InitStruct.Pin = LED0_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(LED_GPIO_Port, &GPIO_InitStruct);
-
-  /* EXTI interrupt init*/
-  HAL_NVIC_SetPriority(EXTI1_IRQn, 10, 0);
-  HAL_NVIC_EnableIRQ(EXTI1_IRQn);
-
-  HAL_NVIC_SetPriority(EXTI15_10_IRQn, 10, 0);
-  HAL_NVIC_EnableIRQ(EXTI15_10_IRQn);
+  HAL_GPIO_Init(LED0_GPIO_Port, &GPIO_InitStruct);
 
 }
 
@@ -559,196 +515,47 @@ static void MX_GPIO_Init(void)
 
 /* USER CODE END 4 */
 
-/* StartDefaultTask function */
-void StartDefaultTask(void const * argument)
-{
-    
-      /* USER CODE BEGIN 5 */
-    g_completeSerialSema= xSemaphoreCreateCounting(2,0);
-    g_completeSPISema =xSemaphoreCreateCounting(2,0);
-    
-  GPIO_InitTypeDef GPIO_InitStruct;
-   /*Configure GPIO pin : DP  */
-  GPIO_InitStruct.Pin = GPIO_PIN_12;
-  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
-  
- HAL_GPIO_WritePin(GPIOA, GPIO_PIN_12, GPIO_PIN_RESET);
- osDelay(50);
- HAL_GPIO_WritePin(GPIOA, GPIO_PIN_12, GPIO_PIN_SET);
- osDelay(1);
 
- setLogMsgLevel(LogMsg_Debug);
-     MX_LWIP_Init();
-  /* init code for USB_DEVICE */
-  MX_USB_DEVICE_Init();
-  callStartupFunctions();
-  
-
-  /* Infinite loop */
-  for(;;)
-  {
-      HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_RESET);
-    osDelay(100);
-     HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_SET);
-         osDelay(100);
-
-    
-  }
-  /* USER CODE END 5 */ 
-}
-
-/**
-  * @brief  Period elapsed callback in non blocking mode
-  * @note   This function is called  when TIM3 interrupt took place, inside
-  * HAL_TIM_IRQHandler(). It makes a direct call to HAL_IncTick() to increment
-  * a global variable "uwTick" used as application time base.
-  * @param  htim : TIM handle
-  * @retval None
-  */
-void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
-{
-/* USER CODE BEGIN Callback 0 */
-
-/* USER CODE END Callback 0 */
-  if (htim->Instance == TIM3) {
-    HAL_IncTick();
-  }
-/* USER CODE BEGIN Callback 1 */
-
-/* USER CODE END Callback 1 */
-}
 
 /**
   * @brief  This function is executed in case of error occurrence.
-  * @param  None
+  * @param  file: The file name as string.
+  * @param  line: The line in file as a number.
   * @retval None
   */
-void _Error_Handler(char * file, int line)
+void _Error_Handler(char *file, int line)
 {
   /* USER CODE BEGIN Error_Handler_Debug */
   /* User can add his own implementation to report the HAL error return state */
-  while(1) 
+  while(1)
   {
   }
-  /* USER CODE END Error_Handler_Debug */ 
+  /* USER CODE END Error_Handler_Debug */
 }
 
-#ifdef USE_FULL_ASSERT
-
+#ifdef  USE_FULL_ASSERT
 /**
-   * @brief Reports the name of the source file and the source line number
-   * where the assert_param error has occurred.
-   * @param file: pointer to the source file name
-   * @param line: assert_param error line source number
-   * @retval None
-   */
+  * @brief  Reports the name of the source file and the source line number
+  *         where the assert_param error has occurred.
+  * @param  file: pointer to the source file name
+  * @param  line: assert_param error line source number
+  * @retval None
+  */
 void assert_failed(uint8_t* file, uint32_t line)
-{
+{ 
   /* USER CODE BEGIN 6 */
   /* User can add his own implementation to report the file name and line number,
-    ex: printf("Wrong parameters value: file %s on line %d\r\n", file, line) */
+     tex: printf("Wrong parameters value: file %s on line %d\r\n", file, line) */
   /* USER CODE END 6 */
-
 }
-
-#endif
-
-
-
-static char _gStatsBuff[1024];
-void txSerialPort(char *pStr, int len)
-{
-
-#if 0    
-    if (pStr == NULL)
-    {
-        vTaskGetRunTimeStats(_gStatsBuff);
-        if(HAL_UART_Transmit_DMA(&huart1, (uint8_t*)_gStatsBuff, strlen(_gStatsBuff))!= HAL_OK)
-        {
-            Error_Handler();
-        }
-        else
-        {
-            xSemaphoreTake( g_completeSerialSema,portMAX_DELAY ) ;
-        }
-        
-    }
-    else
-#endif        
-    {
-        if(HAL_UART_Transmit_DMA(&huart1, (uint8_t*)pStr, len)!= HAL_OK)
-        {
-            Error_Handler();
-        }
-        else
-        {
-            xSemaphoreTake( g_completeSerialSema,portMAX_DELAY ) ;
-        }
-    }
-
-
-
-}
-
-
-void HAL_UART_TxCpltCallback(UART_HandleTypeDef *UartHandle)
-{
-    if (&huart1 == UartHandle)
-    {
-        BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-        xSemaphoreGiveFromISR( g_completeSerialSema, &xHigherPriorityTaskWoken );
-        portYIELD_FROM_ISR( xHigherPriorityTaskWoken );
-    }
-}
-
-void HAL_SPI_TxCpltCallback(SPI_HandleTypeDef *hspi)
-{
-	if (&hspi1 == hspi)
-	{
-		BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-		xSemaphoreGiveFromISR( g_completeSPISema, &xHigherPriorityTaskWoken );
-		portYIELD_FROM_ISR( xHigherPriorityTaskWoken );
-	}
-}
-void HAL_SPI_ErrorCallback(SPI_HandleTypeDef *hspi)
-{
-
-}
-
-void txSPI(uint8_t *pStr, size_t len)
-{
-
-	if(HAL_SPI_Transmit_DMA(&hspi1, (uint8_t*)pStr, len)!= HAL_OK)
-    {
-		Error_Handler();
-    }
-    else
-    {
-    	xSemaphoreTake( g_completeSPISema,portMAX_DELAY ) ;
-    }
-}
-
-
-
-void *malloc(size_t size)
-{
-    return pvPortMalloc(size);
-}
-
-void free(void *ptr)
-{
-    vPortFree(ptr);
-}
+#endif /* USE_FULL_ASSERT */
 
 /**
   * @}
-  */ 
+  */
 
 /**
   * @}
-*/ 
+  */
 
 /************************ (C) COPYRIGHT STMicroelectronics *****END OF FILE****/
